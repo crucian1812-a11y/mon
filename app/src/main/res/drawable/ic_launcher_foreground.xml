@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- корпус кошелька -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,38h40a6,6 0,0 1,6 6v26a6,6 0,0 1,-6 6h-40a6,6 0,0 1,-6 -6v-26a6,6 0,0 1,6 -6z" />
+    <!-- клапан -->
+    <path
+        android:fillColor="#B4F1D4"
+        android:pathData="M66,50h14v14h-14a7,7 0,0 1,0 -14z" />
+    <path
+        android:fillColor="#2E7D5B"
+        android:pathData="M67,57m-2.5,0a2.5,2.5 0,1 1,5 0a2.5,2.5 0,1 1,-5 0" />
+    <!-- знак рубля -->
+    <path
+        android:fillColor="#2E7D5B"
+        android:fillType="evenOdd"
+        android:pathData="M44,45h9a7,7 0,0 1,0 14h-5v3h7v3.5h-7v4.5h-4v-4.5h-3v-3.5h3v-3h-3v-3.5h3zM48,48.5v7h5a3.5,3.5 0,0 0,0 -7z" />
+</vector>

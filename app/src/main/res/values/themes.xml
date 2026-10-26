@@ -1,0 +1,4 @@
+<resources>
+    <style name="Theme.FamilyBudget" parent="android:Theme.Material.Light.NoActionBar" />
+    <color name="ic_launcher_background">#2E7D5B</color>
+</resources>
