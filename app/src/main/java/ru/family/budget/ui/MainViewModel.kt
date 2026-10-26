@@ -1,14 +1,18 @@
 package ru.family.budget.ui
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -20,12 +24,28 @@ import ru.family.budget.data.SettingsStore
 import ru.family.budget.data.SyncConfig
 import ru.family.budget.data.SyncEngine
 import ru.family.budget.data.SyncException
+import ru.family.budget.importer.CategoryGuesser
+import ru.family.budget.importer.FoundOperation
+import ru.family.budget.importer.ImportItem
+import ru.family.budget.importer.ScreenshotOcr
+import ru.family.budget.importer.ScreenshotParser
 import ru.family.budget.model.Category
 import ru.family.budget.model.Expense
 import ru.family.budget.model.FamilyData
 import ru.family.budget.model.Merge
+import ru.family.budget.util.Money
 import java.time.LocalDate
 import java.util.UUID
+
+sealed interface ImportState {
+    data object Idle : ImportState
+    data class Processing(val done: Int, val total: Int) : ImportState
+    data class Ready(
+        val items: List<ImportItem>,
+        val recognizedText: String,
+        val errors: List<String>,
+    ) : ImportState
+}
 
 sealed interface SyncState {
     data object NotConfigured : SyncState
@@ -122,6 +142,96 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val existing = _data.value.categories.find { it.id == id } ?: return
         val tombstone = existing.copy(deleted = true, updatedAt = System.currentTimeMillis())
         mutate { Merge.merge(it, FamilyData(categories = listOf(tombstone))) }
+    }
+
+    // ---------- Скриншоты банка ----------
+
+    private val _import = MutableStateFlow<ImportState>(ImportState.Idle)
+    val importState: StateFlow<ImportState> = _import.asStateFlow()
+
+    private val openImportChannel = Channel<Unit>(Channel.CONFLATED)
+    /** Сигнал интерфейсу открыть экран импорта (например, когда скриншот прислали через «Поделиться»). */
+    val openImport: Flow<Unit> = openImportChannel.receiveAsFlow()
+
+    private val ocr by lazy { ScreenshotOcr(getApplication()) }
+    private var importJob: Job? = null
+
+    fun importScreenshots(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        importJob?.cancel()
+        openImportChannel.trySend(Unit)
+        _import.value = ImportState.Processing(0, uris.size)
+        importJob = viewModelScope.launch {
+            val found = mutableListOf<FoundOperation>()
+            val text = StringBuilder()
+            val errors = mutableListOf<String>()
+            uris.forEachIndexed { index, uri ->
+                try {
+                    val lines = withContext(Dispatchers.Default) { ocr.recognize(uri) }
+                    found += ScreenshotParser.parse(lines)
+                    if (uris.size > 1) text.append("— Скриншот ${index + 1} —\n")
+                    text.append(lines.sortedBy { it.top }.joinToString("\n") { it.text }).append("\n\n")
+                } catch (e: Exception) {
+                    errors += "Скриншот ${index + 1}: не удалось распознать (${e.message ?: e.javaClass.simpleName})"
+                }
+                _import.value = ImportState.Processing(index + 1, uris.size)
+            }
+            _import.value = ImportState.Ready(toImportItems(found), text.toString().trim(), errors)
+        }
+    }
+
+    private fun toImportItems(found: List<FoundOperation>): List<ImportItem> {
+        val data = _data.value
+        val guesser = CategoryGuesser(data)
+        val existing = data.expenses.filter { !it.deleted }.map { it.date to it.amount }.toSet()
+        // Скриншоты одного списка часто перекрываются — одинаковые операции берём один раз.
+        val unique = found.distinctBy { Triple(it.date, it.amount, CategoryGuesser.normalize(it.merchant)) }
+        return unique.mapIndexed { i, op ->
+            val duplicate = (op.date.toString() to op.amount) in existing
+            ImportItem(
+                key = i,
+                checked = !duplicate && !op.isTransfer,
+                amountText = Money.toInput(op.amount),
+                note = op.merchant,
+                categoryId = guesser.guess(op),
+                date = op.date,
+                dateFound = op.dateFound,
+                duplicate = duplicate,
+                transfer = op.isTransfer,
+            )
+        }
+    }
+
+    fun updateImportItem(item: ImportItem) {
+        val state = _import.value as? ImportState.Ready ?: return
+        _import.value = state.copy(items = state.items.map { if (it.key == item.key) item else it })
+    }
+
+    /** Добавляет отмеченные операции как расходы. @return сколько добавлено */
+    fun commitImport(): Int {
+        val state = _import.value as? ImportState.Ready ?: return 0
+        val now = System.currentTimeMillis()
+        val expenses = state.items.filter { it.checked }.mapIndexedNotNull { i, item ->
+            val amount = Money.parse(item.amountText) ?: return@mapIndexedNotNull null
+            Expense(
+                id = UUID.randomUUID().toString(),
+                amount = amount,
+                categoryId = item.categoryId,
+                date = item.date.toString(),
+                note = item.note.trim(),
+                author = settings.deviceName,
+                createdAt = now + i,
+                updatedAt = now,
+            )
+        }
+        if (expenses.isNotEmpty()) mutate { Merge.merge(it, FamilyData(expenses = expenses)) }
+        _import.value = ImportState.Idle
+        return expenses.size
+    }
+
+    fun cancelImport() {
+        importJob?.cancel()
+        _import.value = ImportState.Idle
     }
 
     // ---------- Настройки ----------

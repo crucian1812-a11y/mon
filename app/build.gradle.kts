@@ -17,6 +17,11 @@ android {
         val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionCode = buildNumber
         versionName = "1.0.$buildNumber"
+
+        ndk {
+            // Только процессоры реальных телефонов — так APK заметно меньше.
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     // Один общий ключ для всех сборок (локальных и в GitHub Actions),
@@ -74,6 +79,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")

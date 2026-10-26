@@ -69,6 +69,7 @@ fun HomeScreen(
     pending: Boolean,
     onSync: () -> Unit,
     onAdd: () -> Unit,
+    onFromScreenshot: () -> Unit,
     onEdit: (String) -> Unit,
     onCategories: () -> Unit,
     onSettings: () -> Unit,
@@ -108,16 +109,24 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onAdd,
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("Расход") },
-            )
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                ExtendedFloatingActionButton(
+                    onClick = onFromScreenshot,
+                    icon = { Text("🧾") },
+                    text = { Text("Со скриншота") },
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                )
+                ExtendedFloatingActionButton(
+                    onClick = onAdd,
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    text = { Text("Расход") },
+                )
+            }
         },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 96.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 168.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item {
@@ -199,7 +208,7 @@ fun HomeScreen(
                 item {
                     Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
                         Text(
-                            "В этом месяце расходов пока нет.\nНажмите «+ Расход», чтобы добавить.",
+                            "В этом месяце расходов пока нет.\nНажмите «+ Расход» или добавьте\nсразу несколько со скриншота банка.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
